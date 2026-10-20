@@ -16,17 +16,17 @@ Overlapping detections from the two tile grids are now merged **exactly as in th
 Unchanged: model, tiling (576 px, two grids), confidence threshold (default 0.732 from `configs/inference.yaml`), IoU threshold 0.101, interface, CSV/ZIP format.
 
 ## Base-pipeline steps deliberately not copied
-- **Tile skipping** (`skip_bright`, `skip_blue` in the base config): on Bastian Polst's images, 33–34 of 52 tiles per image would be skipped as "blue", including nearly all tiles containing animals.
-- **Full-resolution dish detection**: ~52 s per 12 MP image in testing (CPU), and on Bastian's images it returned a circle larger than the jar. The Space keeps its downscaled version (same algorithm on a 1600 px copy). Known difference: on 2 of 4 test images the downscaled version picked a smaller circle (r ≈ 1210 vs 1470 px); no animal was affected there, but animals near the dish edge could be.
+- **Tile skipping** (`skip_bright`, `skip_blue` in the base config): on an external test set (4 images), 33–34 of 52 tiles per image would be skipped as "blue", including nearly all tiles containing animals.
+- **Full-resolution dish detection**: ~52 s per 12 MP image in testing (CPU), and on the same test images it returned a circle larger than the jar. The Space keeps its downscaled version (same algorithm on a 1600 px copy). Known difference: on 2 of 4 test images the downscaled version picked a smaller circle (r ≈ 1210 vs 1470 px); no animal was affected there, but animals near the dish edge could be.
 
 ## Tests (no YOLO model in the test environment)
 - Equivalence: v0.2.0 merging = base `fuse_graphcut` in 74/74 cases (simulated tile detections and random overlapping polygons): same objects, order, confidence and outlines.
-- End-to-end on Bastian's 4 images (4272×2848) with a stand-in detector that returns cut-off pieces at tile edges like YOLO: total 318 objects vs 327 true blobs (v0.1.1: 402).
+- End-to-end on 4 external test images (4272×2848) with a stand-in detector that returns cut-off pieces at tile edges like YOLO: total 318 objects vs 327 true blobs (v0.1.1: 402).
 - Interface, CSV and ZIP identical to v0.1.1 for identical detections.
 - Caveat: when distinct animals' outlines overlap strongly, IoU > 0.101 merges them (inherent to the published method). In simulations with heavily overlapping animals this undercounted; real-image performance must come from validation.
 
 ## Validation (to do on the Space)
-1. Bastian's 4 images (14 animals each); v0.1.1 gave 25/25/19/18.
+1. The 4 external test images (14 animals each); v0.1.1 gave 25/25/19/18.
 2. Difenoconazole set (46 replicates, manual counts): counts, error and EC50 vs manual and vs v0.1 results.
 3. If time allows, the paper's test images (manual annotations exist).
 4. Re-check the threshold: 0.80 performed best with v0.1, possibly compensating for the edge overcount; with base merging, the paper's 0.732 may be right again (to be tested, not assumed).
@@ -40,12 +40,12 @@ Unchanged: model, tiling (576 px, two grids), confidence threshold (default 0.73
 
 # CollemBot v0.1.1 — changelog
 
-Date: 2026-10-20 · Base: Hugging Face Space `MichaWehrli/COLLEMBOT`, commit d23dc86 (`gradio_app.py` sha256 `c2519d0f…9f15`, as supplied by Micha)
+Date: 2026-10-20 · Base: Hugging Face Space commit d23dc86 (`gradio_app.py` sha256 `c2519d0f…9f15`)
 Patched `gradio_app.py` sha256: see `test_report_v0.1.1.md` · Code changes AI-assisted (Claude Opus 5.5), to be reviewed by the maintainer before deployment.
 
 **Detection, tiling, fusion, confidence threshold and all CSV columns/values are unchanged.** This release changes the interface only.
 
-## Changes (decided by Micha, 2026-10-20)
+## Changes (2026-10-20)
 
 1. **Removed the Single image tab.** Compare groups handles one or more images; Hand correction and Calibrate threshold are unchanged.
 2. **Removed ruler auto-detection** (function `detect_ruler_scale` and the three "📏 Auto-detect" buttons in Single image, Compare groups and Calibrate threshold). The px/mm field remains, now with an ImageJ how-to tip under it.

@@ -2,9 +2,9 @@
 # Usage: python scripts/gradio_app.py (for Colab helper modules).
 # Ownership: Copyright (c) 2026 Adrian Meyer
 # License: AGPL-3.0 only (code); model weights and dependencies may be under AGPL-3.0.
-# v0.2.0 (2026-10-20, Micha Wehrli): detection merging now follows the base pipeline
+# v0.2.0 (2026-10-20): detection merging now follows the base pipeline
 # (waldstrom/collembot scripts/run_inference.py): IoU-based graph-cut fusion. AI-assisted (Claude).
-# v0.1.1 (2026-10-20, Micha Wehrli): removed Single-image tab and ruler auto-detection; added full-resolution
+# v0.1.1 (2026-10-20): removed Single-image tab and ruler auto-detection; added full-resolution
 # annotated ZIP export; size classes only with a px/mm scale. Changes AI-assisted (Claude); see CHANGELOG.md.
 """Gradio-ready inference helper for Google Colab.
 
