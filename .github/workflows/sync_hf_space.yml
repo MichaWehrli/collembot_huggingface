@@ -1,0 +1,31 @@
+# Upload the contents of huggingface_space/ to the Hugging Face Space root.
+# - Runs on every push to main that changes huggingface_space/, or manually (Actions tab).
+# - Uploads only; nothing on the Space is deleted (the model weights stay there).
+# - Needs a repository secret HF_TOKEN: a Hugging Face token with write access to the Space.
+# AI-assisted (Claude), 2026-10-20.
+name: Sync huggingface_space to Hugging Face
+
+on:
+  push:
+    branches: [main]
+    paths: ["huggingface_space/**"]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Hugging Face CLI
+        run: pip install --upgrade huggingface_hub
+      - name: Upload huggingface_space/ to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          hf upload MichaWehrli/COLLEMBOT huggingface_space . \
+            --repo-type=space \
+            --token="$HF_TOKEN" \
+            --commit-message="Sync from GitHub ${GITHUB_SHA::7}"
