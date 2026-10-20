@@ -1,0 +1,22 @@
+# CollemBot — HuggingFace Spaces requirements
+# CPU base image (free tier). If you upgrade to a GPU Space, torch is already
+# included in the CUDA base image and you can remove the torch lines.
+
+# ── core ML ───────────────────────────────────────────────────────────────────
+torch==2.2.2
+torchvision==0.17.2
+ultralytics>=8.3          # YOLOv11 / YOLO segmentation
+
+# ── image processing ──────────────────────────────────────────────────────────
+opencv-python-headless    # headless = no GUI deps, required in Docker
+Pillow
+numpy
+
+# ── inference utilities ───────────────────────────────────────────────────────
+scipy
+scikit-learn
+PyYAML
+tqdm
+
+# ── Gradio UI ─────────────────────────────────────────────────────────────────
+gradio>=4.0
