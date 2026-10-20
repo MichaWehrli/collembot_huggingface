@@ -1,3 +1,43 @@
+# CollemBot v0.2.0 — changelog
+
+Date: 2026-10-20 · Changes AI-assisted (Claude Opus 5.5); maintainer review and validation pending.
+
+**This release changes counts.** Validate before using v0.2.0 counts in a publication (see "Validation" below).
+
+## What changed
+Overlapping detections from the two tile grids are now merged **exactly as in the base pipeline** used for the paper (`waldstrom/collembot`, `scripts/run_inference.py`, commit a437598):
+
+1. Two detections are merged when their polygon IoU > 0.101 (`fuse_graphcut`). `polygon_iou` and `safe_polygon` are copied verbatim from the base file. Only intersecting pairs are tested (STRtree pre-filter); non-intersecting pairs have IoU 0, so the result equals the base all-pairs loop.
+2. Removed the v0.1 merge code: its IoU step never ran with Shapely ≥ 2.0 (`STRtree.query_bulk` no longer exists, so the check silently returned nothing), and its centroid-distance step is not part of the base pipeline. This was the main cause of multi-counting at tile edges.
+3. Tile polygons are cleaned with the base `safe_polygon`.
+4. Detections are filtered by the dish circle before merging only, as in the base pipeline (v0.1 filtered again after merging).
+5. The app stops with a clear error if Shapely < 2.0; Dockerfile requires `shapely>=2.0`.
+
+Unchanged: model, tiling (576 px, two grids), confidence threshold (default 0.732 from `configs/inference.yaml`), IoU threshold 0.101, interface, CSV/ZIP format.
+
+## Base-pipeline steps deliberately not copied
+- **Tile skipping** (`skip_bright`, `skip_blue` in the base config): on Bastian Polst's images, 33–34 of 52 tiles per image would be skipped as "blue", including nearly all tiles containing animals.
+- **Full-resolution dish detection**: ~52 s per 12 MP image in testing (CPU), and on Bastian's images it returned a circle larger than the jar. The Space keeps its downscaled version (same algorithm on a 1600 px copy). Known difference: on 2 of 4 test images the downscaled version picked a smaller circle (r ≈ 1210 vs 1470 px); no animal was affected there, but animals near the dish edge could be.
+
+## Tests (no YOLO model in the test environment)
+- Equivalence: v0.2.0 merging = base `fuse_graphcut` in 74/74 cases (simulated tile detections and random overlapping polygons): same objects, order, confidence and outlines.
+- End-to-end on Bastian's 4 images (4272×2848) with a stand-in detector that returns cut-off pieces at tile edges like YOLO: total 318 objects vs 327 true blobs (v0.1.1: 402).
+- Interface, CSV and ZIP identical to v0.1.1 for identical detections.
+- Caveat: when distinct animals' outlines overlap strongly, IoU > 0.101 merges them (inherent to the published method). In simulations with heavily overlapping animals this undercounted; real-image performance must come from validation.
+
+## Validation (to do on the Space)
+1. Bastian's 4 images (14 animals each); v0.1.1 gave 25/25/19/18.
+2. Difenoconazole set (46 replicates, manual counts): counts, error and EC50 vs manual and vs v0.1 results.
+3. If time allows, the paper's test images (manual annotations exist).
+4. Re-check the threshold: 0.80 performed best with v0.1, possibly compensating for the edge overcount; with base merging, the paper's 0.732 may be right again (to be tested, not assumed).
+
+## Known issues (unchanged)
+- Tiles do not cover the whole image (e.g. 15.5 % of a 4272×2848 image), same as the base pipeline.
+- Calibration sweep error metric; unpinned dependencies (except Shapely); Docker build clones `waldstrom/collembot` main.
+- Dockerfile: `gradio>=4.0` is not quoted, so the shell reads `>` as a redirect and Gradio is effectively unpinned.
+
+---
+
 # CollemBot v0.1.1 — changelog
 
 Date: 2026-10-20 · Base: Hugging Face Space `MichaWehrli/COLLEMBOT`, commit d23dc86 (`gradio_app.py` sha256 `c2519d0f…9f15`, as supplied by Micha)

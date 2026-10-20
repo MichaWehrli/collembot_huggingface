@@ -2,6 +2,8 @@
 # Usage: python scripts/gradio_app.py (for Colab helper modules).
 # Ownership: Copyright (c) 2026 Adrian Meyer
 # License: AGPL-3.0 only (code); model weights and dependencies may be under AGPL-3.0.
+# v0.2.0 (2026-10-20, Micha Wehrli): detection merging now follows the base pipeline
+# (waldstrom/collembot scripts/run_inference.py): IoU-based graph-cut fusion. AI-assisted (Claude).
 # v0.1.1 (2026-10-20, Micha Wehrli): removed Single-image tab and ruler auto-detection; added full-resolution
 # annotated ZIP export; size classes only with a px/mm scale. Changes AI-assisted (Claude); see CHANGELOG.md.
 """Gradio-ready inference helper for Google Colab.
@@ -22,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
+import warnings
 import base64
 import csv
 import tempfile
@@ -42,6 +45,10 @@ from PIL import Image, ImageDraw, ImageFont
 from shapely.geometry import GeometryCollection, MultiPoint, MultiPolygon, Point, Polygon
 from shapely.strtree import STRtree
 from shapely.validation import make_valid
+from shapely.ops import unary_union
+import shapely
+if int(shapely.__version__.split(".")[0]) < 2:
+    raise ImportError(f"CollemBot needs Shapely >= 2.0 (found {shapely.__version__})")
 import torch
 
 torch.backends.cudnn.benchmark = True
@@ -294,112 +301,110 @@ def measure_polygon(geom) -> dict:
     }
 
 
+# ── v0.2.0: functions copied verbatim from the base pipeline ──────────────────
+# Source: waldstrom/collembot @ a437598, scripts/run_inference.py
+# (renamed polygon_iou -> _base_polygon_iou, safe_polygon -> _base_safe_polygon)
+INVALID_INTERSECTIONS = 0
+
+
+def _base_polygon_iou(a, b):
+    global INVALID_INTERSECTIONS
+    if a is None or b is None:
+        return 0
+    if not a.is_valid or a.is_empty:
+        a = make_valid(a)
+        if a.is_empty:
+            return 0
+    if not b.is_valid or b.is_empty:
+        b = make_valid(b)
+        if b.is_empty:
+            return 0
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "error", message="invalid value encountered in intersection"
+            )
+            inter = a.intersection(b).area
+    except RuntimeWarning:
+        INVALID_INTERSECTIONS += 1
+        return 0
+    union = a.area + b.area - inter
+    if union <= 0 or math.isnan(union):
+        return 0
+    return inter / union
+
+
+def _base_safe_polygon(coords):
+    """
+    Create a valid Shapely polygon from coords, ignoring degenerate cases.
+    """
+    # remove consecutive duplicates
+    cleaned = []
+    for (x,y) in coords:
+        if not cleaned or (x,y) != cleaned[-1]:
+            cleaned.append((x,y))
+    if len(cleaned)<3:
+        return None
+    # ensure ring closure
+    if cleaned[0]!= cleaned[-1]:
+        cleaned.append(cleaned[0])
+    # drop polygons with non-finite coords
+    for x, y in cleaned:
+        if not math.isfinite(x) or not math.isfinite(y):
+            return None
+
+    try:
+        poly = Polygon(cleaned)
+        if poly.is_empty:
+            return None
+        if not poly.is_valid:
+            poly = make_valid(poly)
+        if isinstance(poly, GeometryCollection):
+            # union all pieces that have area
+            poly = unary_union([g for g in poly.geoms if g.area>0])
+        if poly.is_empty:
+            return None
+        return poly
+    except:
+        return None
+
+
 def _build_adjacency(polys: Sequence[dict], iou_th: float):
-    """Build adjacency using polygon IoU with a size-aware centroid fallback.
+    """Links for graph-cut fusion, equal to the base pipeline.
 
-    Phase 1 — IoU: two polygons that intersect AND have IoU > iou_th are merged.
-    This handles the common case where the same organism appears in both tile
-    grids with overlapping polygons.
+    Base (run_inference.py, fuse_graphcut): two detections are linked when
+    their polygon IoU > ``iou_th``, tested for all pairs. Pairs whose polygons
+    do not intersect have IoU 0 and can never be linked, so testing only the
+    intersecting pairs (STRtree pre-filter, Shapely >= 2) gives the same links,
+    much faster for images with hundreds of animals.
 
-    Phase 2 — size-aware centroid distance: catches large organisms that span a
-    tile boundary so that one grid captures the left half and the other the right
-    half. These non-overlapping halves are NEVER found by the spatial index in
-    Phase 1, so they escape fusion and get counted twice.
-
-    The centroid threshold scales with organism size: for a polygon with
-    equivalent-circle radius R, two centroids within 0.55 * R of each other
-    are treated as the same organism. This is conservative for small organisms
-    (R≈8px → threshold≈4px) but generous enough for adults (R≈30px → threshold≈16px).
-
-    Critically, Phase 2 only fires when the two detections come from DIFFERENT
-    tile grids (ori vs shift), preventing genuine neighbouring organisms of
-    similar size from being incorrectly merged.
+    v0.2.0 replaces the v0.1 version, whose IoU step never ran with Shapely 2
+    (it relied on ``STRtree.query_bulk``, which Shapely 2 removed) and whose
+    extra centroid-distance step is not part of the base pipeline.
     """
     n = len(polys)
     adj = [[] for _ in range(n)]
-
-    prepared = []
+    geom_by_idx = {}
     for idx, poly in enumerate(polys):
-        geom = _clean_polygon(poly.get("polygon"))
+        geom = poly.get("polygon")
         if geom is not None:
-            prepared.append((idx, geom))
-
-    if len(prepared) < 2:
-        return adj, {idx: geom for idx, geom in prepared}
-
-    indices     = [idx for idx, _ in prepared]
-    geoms       = [geom for _, geom in prepared]
-    geom_by_idx = {idx: geom for idx, geom in prepared}
-
-    # Pre-compute centroids and equivalent radii once
-    centroids = np.array([[g.centroid.x, g.centroid.y] for g in geoms])
-    radii     = np.array([math.sqrt(max(g.area, 1.0) / math.pi) for g in geoms])
-
-    tree = STRtree(geoms)
-    seen = set()
-
-    # ── Phase 1: IoU on intersecting polygons ─────────────────────────────────
-    if hasattr(tree, "query_bulk"):
-        pairs = tree.query_bulk(geoms, predicate="intersects")
-    else:
-        idx_by_id = {id(g): i for i, g in enumerate(geoms)}
-        src_idx, dst_idx = [], []
-        for src, geom in enumerate(geoms):
-            for candidate in tree.query(geom):
-                dst = idx_by_id.get(id(candidate))
-                if dst is not None:
-                    src_idx.append(src)
-                    dst_idx.append(dst)
-        pairs = np.array([src_idx, dst_idx], dtype=int)
-
-    if pairs.size > 0:
-        for src, dst in zip(pairs[0], pairs[1]):
-            if src == dst:
-                continue
-            a_idx = indices[int(src)]
-            b_idx = indices[int(dst)]
-            key   = (a_idx, b_idx) if a_idx < b_idx else (b_idx, a_idx)
-            if key in seen:
-                continue
-            seen.add(key)
-            if _polygon_iou_internal(geoms[int(src)], geoms[int(dst)], assume_valid=True) > iou_th:
-                adj[a_idx].append(b_idx)
-                adj[b_idx].append(a_idx)
-
-    # ── Phase 2: size-aware centroid distance for non-overlapping split detections
-    # Only compare detections from different grids (ori vs shift).
-    grids = [polys[idx].get("grid", "ori") for idx in indices]
-
-    cx = centroids[:, 0]
-    cy = centroids[:, 1]
-
-    for src in range(len(geoms)):
-        r_src = radii[src]
-        threshold = 0.55 * r_src   # scales with organism size
-
-        # Fast bounding-box pre-filter
-        mask = (
-            (np.abs(cx - cx[src]) <= threshold) &
-            (np.abs(cy - cy[src]) <= threshold) &
-            (np.arange(len(geoms)) != src)
-        )
-        for dst in np.where(mask)[0]:
-            dst = int(dst)
-            # Only merge across different grids — prevents merging genuine
-            # neighbouring organisms in the same grid
-            if grids[src] == grids[dst]:
-                continue
-            a_idx = indices[src]
-            b_idx = indices[dst]
-            key   = (a_idx, b_idx) if a_idx < b_idx else (b_idx, a_idx)
-            if key in seen:
-                continue
-            dist = math.hypot(cx[src] - cx[dst], cy[src] - cy[dst])
-            if dist <= threshold:
-                seen.add(key)
-                adj[a_idx].append(b_idx)
-                adj[b_idx].append(a_idx)
-
+            geom_by_idx[idx] = geom
+    indices = list(geom_by_idx.keys())
+    if len(indices) < 2:
+        return adj, geom_by_idx
+    valid = [_clean_polygon(geom_by_idx[i]) for i in indices]
+    keep = [k for k, g in enumerate(valid) if g is not None]
+    if len(keep) < 2:
+        return adj, geom_by_idx
+    tree = STRtree([valid[k] for k in keep])
+    src_idx, dst_idx = tree.query([valid[k] for k in keep], predicate="intersects")
+    for s, d in zip(src_idx.tolist(), dst_idx.tolist()):
+        if s >= d:
+            continue
+        a, b = indices[keep[s]], indices[keep[d]]
+        if _base_polygon_iou(geom_by_idx[a], geom_by_idx[b]) > iou_th:
+            adj[a].append(b)
+            adj[b].append(a)
     return adj, geom_by_idx
 
 
@@ -493,18 +498,9 @@ def _polygon_from_result(res, idx: int, offset: Tuple[int, int], grid: str):
     if res.masks and res.masks.xy is not None:
         coords2d = res.masks.xy[idx]
         pts = [(float(x) + ox, float(y) + oy) for (x, y) in coords2d]
-        unique_pts = []
-        seen = set()
-        for pt in pts:
-            if pt in seen:
-                continue
-            seen.add(pt)
-            unique_pts.append(pt)
-        if len(unique_pts) >= 3:
-            geom = Polygon(unique_pts)
-            geom = make_valid(geom) if (not geom.is_valid or geom.is_empty) else geom
-            if geom and not geom.is_empty:
-                polygons.append({"polygon": geom, "confidence": float(res.boxes.conf[idx]), "grid": grid})
+        geom = _base_safe_polygon(pts)   # v0.2.0: same polygon cleaning as the base pipeline
+        if geom is not None:
+            polygons.append({"polygon": geom, "confidence": float(res.boxes.conf[idx]), "grid": grid})
     else:
         box = res.boxes.xyxy[idx].tolist()
         x0, y0, x1, y1 = box
@@ -790,7 +786,7 @@ def infer_image(
     if progress:
         progress(0.82, desc="Fusing detections")
     fused = fuse_graphcut(filtered_roi, iou_th=BEST_IOU, alpha=ALPHA)
-    fused = filter_polygons_by_circle(fused, circle)
+    # v0.2.0: base pipeline filters by the dish circle before fusion only
     # Attach measurements to every fused detection so visualisation and export
     # can both use them without recomputing.
     for pol in fused:
@@ -1926,7 +1922,7 @@ def _make_batch_thumbnail(
 # AI-assisted (Claude Opus 5.5, 2026-10-20); reviewed by: <pending>.
 # Nothing in this block changes detection, fusion or counting.
 
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.2.0"
 
 SCALE_HELP = (
     "Measure once per camera setup in ImageJ/Fiji: draw a straight line between "

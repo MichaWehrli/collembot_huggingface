@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir --upgrade pip \
         Pillow \
         scipy \
         scikit-learn \
-        shapely \
+        "shapely>=2.0" \
         PyYAML \
         tqdm \
         openpyxl \
