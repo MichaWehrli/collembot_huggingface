@@ -11,7 +11,10 @@ pinned: false
 # 🪲 COLLEMBOT — AI-based Collembola Counting for OECD 232
 
 **⚠️ Beta — validate counts before use in publications.**  
+Version 0.2.1 (2026-10-28): title page with a usage notice; counts unchanged from 0.2.0.  
 Version 0.2.0 (2026-10-20): overlapping detections are now merged exactly as in the published pipeline (base repository `scripts/run_inference.py`). Counts differ from 0.1.x — see CHANGELOG.md.
+
+> **💸 Please use this Space considerately.** It runs on a paid cloud GPU that the developers fund themselves and offer free of charge; every hour it runs costs us money, and usage has recently increased sharply. Run only what you need, test settings on 2–3 images before a full batch, and download your results straight away. The Space goes to sleep after 15 minutes without use; the next visitor wakes it up (this may take a few minutes), and results that were not downloaded may be lost. For large or routine analyses, please run CollemBot on your own computer: [github.com/waldstrom/collembot](https://github.com/waldstrom/collembot). Questions or problems: [micha.wehrli@eawag.ch](mailto:micha.wehrli@eawag.ch).
 
 COLLEMBOT is a free, open-source tool for automated counting and body-size measurement of *Folsomia candida* in OECD 232 soil reproduction toxicity tests. It uses a YOLOv11x-seg instance segmentation model trained on images from six European laboratories.
 

@@ -1,3 +1,14 @@
+# CollemBot — changelog
+
+## v0.2.1 (2026-10-28) — interface text only
+Changes AI-assisted (Claude Opus 5.5); maintainer review pending.
+
+- New title page: before the tabs appear, visitors see a short notice that the online GPU is paid for by the developers per hour, that usage has increased sharply, and how to use the Space considerately (run only what is needed, test on 2–3 images first, download results straight away, run large or routine analyses locally from GitHub), that the app sleeps after 15 minutes without use, and a contact address for help, next to the CollemBot title graphic (`collembot_title.jpg`, 1200 px wide; page works without it). The tabs open after "I understand — continue to CollemBot"; a one-line reminder then stays under the title.
+- README: same notice near the top.
+- Detection, tiling, merging, threshold and CSV/ZIP contents are unchanged; `run_settings.json` now records app version 0.2.1.
+
+---
+
 # CollemBot v0.2.0 — changelog
 
 Date: 2026-10-20 · Changes AI-assisted (Claude Opus 5.5); maintainer review and validation pending.

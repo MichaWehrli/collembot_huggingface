@@ -1922,7 +1922,56 @@ def _make_batch_thumbnail(
 # AI-assisted (Claude Opus 5.5, 2026-10-20); reviewed by: <pending>.
 # Nothing in this block changes detection, fusion or counting.
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.2.1"
+
+# v0.2.1: title page shown before the app (interface text only).
+USAGE_NOTICE_MD = """
+## Before you start — please read
+
+**CollemBot is free to use, but not free to run.**
+This online version runs on a cloud GPU. We, the CollemBot developers, pay for this GPU
+ourselves, for every hour it runs, and offer the service free of charge.
+Usage has recently increased sharply.
+To save costs, the app goes to sleep after 15 minutes without use. The next visitor wakes it
+up, which may take a few minutes, and results that were not downloaded may be lost.
+
+**Please help us keep CollemBot online for everyone:**
+
+- **Run only what you need.** Upload only the images you want to analyse and avoid
+  re-running the same images.
+- **Test first.** Check threshold and px/mm scale on 2–3 images before you run a whole batch.
+- **Download your results straight away** (ZIP or CSV), so you do not have to run them again
+  and they are safe when the app goes to sleep.
+- **Large or routine analyses:** please run CollemBot on your own computer.
+  It is open source, with installation instructions on
+  [GitHub (waldstrom/collembot)](https://github.com/waldstrom/collembot).
+
+**Questions or problems?** Contact [micha.wehrli@eawag.ch](mailto:micha.wehrli@eawag.ch).
+
+If CollemBot is useful for your work, please cite
+[doi:10.1093/etojnl/vgag068](https://doi.org/10.1093/etojnl/vgag068). Thank you!
+"""
+
+USAGE_REMINDER_MD = (
+    "💡 *Free to use, but we pay for every GPU hour: please run only what you need and "
+    "download results straight away (the app sleeps after 15 min without use). "
+    "Large or routine analyses: run CollemBot locally "
+    "([GitHub](https://github.com/waldstrom/collembot)). "
+    "Help: [micha.wehrli@eawag.ch](mailto:micha.wehrli@eawag.ch)*"
+)
+
+# Title-page graphic (file next to this script on the Space: /app/collembot_title.jpg).
+# If the file is missing, the title page is shown without it.
+TITLE_IMAGE = Path(__file__).resolve().parent / "collembot_title.jpg"
+
+
+def _title_image_kwargs():
+    """Hide download/share buttons on the graphic (Gradio 6: `buttons`; older: flags)."""
+    import inspect
+    params = inspect.signature(gr.Image.__init__).parameters
+    if "buttons" in params:
+        return {"buttons": ["fullscreen"]}
+    return {k: False for k in ("show_download_button", "show_share_button") if k in params}
 
 SCALE_HELP = (
     "Measure once per camera setup in ImageJ/Fiji: draw a straight line between "
@@ -2490,7 +2539,20 @@ def launch_app(
     with gr.Blocks(title="CollemBot") as demo:
         gr.Markdown(f"# 🪲 CollemBot v{APP_VERSION} — Collembola counting & size analysis")
 
-        with gr.Tabs():
+        # v0.2.1: title page; the tabs are shown only after "continue"
+        with gr.Column(visible=True) as notice_col:
+            with gr.Row(equal_height=False):
+                if TITLE_IMAGE.exists():
+                    with gr.Column(scale=2, min_width=280):
+                        gr.Image(str(TITLE_IMAGE), show_label=False, container=False,
+                                 interactive=False, **_title_image_kwargs())
+                with gr.Column(scale=3, min_width=320):
+                    gr.Markdown(USAGE_NOTICE_MD)
+            btn_continue = gr.Button(
+                "I understand — continue to CollemBot", variant="primary")
+        usage_reminder = gr.Markdown(USAGE_REMINDER_MD, visible=False)
+
+        with gr.Column(visible=False) as app_col, gr.Tabs():
 
             # ── Tab 2: multi-image comparison ─────────────────────────────────
             with gr.Tab("Compare groups"):
@@ -3055,6 +3117,15 @@ def launch_app(
                     outputs=[conf_slider2, conf_slider3,
                              cal_apply_status],
                 )
+
+        # v0.2.1: leave the title page (no GPU work)
+        btn_continue.click(
+            fn=lambda: (gr.update(visible=False), gr.update(visible=True),
+                        gr.update(visible=True)),
+            inputs=None,
+            outputs=[notice_col, usage_reminder, app_col],
+            queue=False,
+        )
 
     demo.launch(share=share, debug=True, allowed_paths=["/tmp"])
     return demo
