@@ -1,5 +1,13 @@
 # CollemBot — changelog
 
+## v0.2.3 (2026-10-28) — anonymous usage log
+Changes AI-assisted (Claude Opus 5.5); maintainer review pending.
+
+- One log line per analysis (Compare groups, Hand correction, Calibrate threshold), shown in the Space's Logs tab (desktop: in its own window), e.g. `[CollemBot usage] 2026-10-28 10:41 UTC | compare | browser | 3 image(s) | 42 s | ok`.
+- Logged: UTC time (minute), tab, client type (`browser`, `script` = API client, `other`), number of images, run time, ok/error. Not logged: IP address, user-agent text, file names, image content, session or user IDs. Client type is derived from request headers; only the one word is kept.
+- Purpose: to see whether the Space is used by people in the browser or by scripts, and how much (GPU cost).
+- Analysis code, results, CSV and ZIP unchanged; API endpoint names unchanged.
+
 ## v0.2.2 (2026-10-28) — desktop version
 Changes AI-assisted (Claude Opus 5.5); maintainer review pending.
 

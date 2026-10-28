@@ -1922,7 +1922,7 @@ def _make_batch_thumbnail(
 # AI-assisted (Claude Opus 5.5, 2026-10-20); reviewed by: <pending>.
 # Nothing in this block changes detection, fusion or counting.
 
-APP_VERSION = "0.2.2"
+APP_VERSION = "0.2.3"
 
 # v0.2.1: title page shown before the app (interface text only).
 USAGE_NOTICE_MD = """
@@ -1987,6 +1987,61 @@ def _title_page_default() -> bool:
     """Title page is shown unless COLLEMBOT_TITLE_PAGE is 0/false/no/off."""
     value = os.environ.get("COLLEMBOT_TITLE_PAGE", "1").strip().lower()
     return value not in ("0", "false", "no", "off")
+
+
+# v0.2.3: anonymous usage log, one line per analysis (Space "Logs" tab / desktop console).
+# Logged: UTC time (minute), tab, client type, number of images, run time, ok/error.
+# Not logged: IP address, user-agent text, file names, image content, session or user IDs.
+_SCRIPT_AGENTS = ("gradio_client", "python", "httpx", "requests", "curl", "wget", "node")
+
+
+def _client_type(request) -> str:
+    """'browser', 'script' (API client) or 'other'. Only this word is kept."""
+    try:
+        headers = {str(k).lower(): str(v) for k, v in dict(request.headers).items()}
+    except Exception:
+        return "other"
+    agent = headers.get("user-agent", "").lower()
+    if headers.get("x-gradio-user", "").lower() == "api" or any(s in agent for s in _SCRIPT_AGENTS):
+        return "script"
+    if agent.startswith("mozilla/"):
+        return "browser"
+    return "other"
+
+
+def _usage_logged(fn, tab: str, count_images):
+    """Wrap an analysis function: same inputs and outputs, plus one anonymous log line.
+    Gradio passes the request because the wrapper declares a gr.Request parameter."""
+    import functools
+    import inspect
+    import time
+
+    sig = inspect.signature(fn)
+    params = list(sig.parameters.values()) + [inspect.Parameter(
+        "request", inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None, annotation=gr.Request)]
+    new_sig = sig.replace(parameters=params)
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        bound = new_sig.bind(*args, **kwargs)
+        request = bound.arguments.pop("request", None)
+        try:
+            n_images = int(count_images(bound.arguments))
+        except Exception:
+            n_images = -1
+        start, status = time.monotonic(), "error"
+        try:
+            result = fn(**bound.arguments)
+            status = "ok"
+            return result
+        finally:
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            print(f"[CollemBot usage] {stamp} | {tab} | {_client_type(request)} | "
+                  f"{n_images} image(s) | {time.monotonic() - start:.0f} s | {status}", flush=True)
+
+    wrapper.__signature__ = new_sig
+    wrapper.__annotations__ = {**getattr(fn, "__annotations__", {}), "request": gr.Request}
+    return wrapper
 
 SCALE_HELP = (
     "Measure once per camera setup in ImageJ/Fiji: draw a straight line between "
@@ -2639,7 +2694,8 @@ def launch_app(
                 )
 
                 btn2.click(
-                    fn=_compare,
+                    fn=_usage_logged(_compare, "compare",
+                                     lambda a: len(a.get("files") or [])),
                     inputs=[multi_files, labels_inp, px_per_mm_c, conf_slider2],
                     outputs=[out_plot, out_csv2, out_table, out_gallery, out_zip],
                 )
@@ -2762,7 +2818,8 @@ def launch_app(
                     return state, canvas, df, tally
 
                 btn_corr_run.click(
-                    fn=_corr_run,
+                    fn=_usage_logged(_corr_run, "hand-correction",
+                                     lambda a: int(a.get("pil_img") is not None)),
                     inputs=[corr_inp, conf_slider3],
                     outputs=[corr_state, corr_canvas, corr_df, corr_tally],
                 )
@@ -3112,7 +3169,9 @@ def launch_app(
                     return buf.name, result_md, best_th, gr.update(interactive=True)
 
                 btn_calibrate.click(
-                    fn=_run_calibration,
+                    fn=_usage_logged(_run_calibration, "calibration",
+                                     lambda a: sum(a.get(k) is not None
+                                                   for k in ("img1", "img2", "img3"))),
                     inputs=[
                         cal_inps[0], cal_counts[0], cal_scales[0],
                         cal_inps[1], cal_counts[1], cal_scales[1],

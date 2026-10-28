@@ -11,6 +11,7 @@ pinned: false
 # 🪲 COLLEMBOT — AI-based Collembola Counting for OECD 232
 
 **⚠️ Beta — validate counts before use in publications.**  
+Version 0.2.3 (2026-10-28): anonymous usage log (see Privacy).  
 Version 0.2.2 (2026-10-28): desktop version (same app, runs on your own computer); counts unchanged from 0.2.0.  
 Version 0.2.1 (2026-10-28): title page with a usage notice.  
 Version 0.2.0 (2026-10-20): overlapping detections are now merged exactly as in the published pipeline (base repository `scripts/run_inference.py`). Counts differ from 0.1.x — see CHANGELOG.md.
@@ -20,6 +21,8 @@ Version 0.2.0 (2026-10-20): overlapping detections are now merged exactly as in 
 COLLEMBOT is a free, open-source tool for automated counting and body-size measurement of *Folsomia candida* in OECD 232 soil reproduction toxicity tests. It uses a YOLOv11x-seg instance segmentation model trained on images from six European laboratories.
 
 Published in *Environmental Toxicology and Chemistry* (2026) · DOI: [10.1093/etojnl/vgag068](https://doi.org/10.1093/etojnl/vgag068)
+
+**Privacy and usage log:** for functional analysis purposes only (to understand how CollemBot is used and what it costs to run), the app logs very basic data for each analysis: the time (to the minute), the tab, whether the analysis was started in a browser or by a script, the number of images, the run time and whether it finished. **No personal data is logged**: no IP addresses, no browser or device details, no file names, no image content, and no user or session IDs, so log entries cannot be traced back to a person. The desktop version prints the same line only to its own window on your computer.
 
 ---
 
