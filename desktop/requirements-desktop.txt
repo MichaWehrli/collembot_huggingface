@@ -1,0 +1,19 @@
+# CollemBot desktop: Python packages.
+# Versions match the Hugging Face Space (run of 2026-10-20) wherever the Space records them,
+# so that counts and lengths are the same as online.
+# torch 2.2.2 / torchvision 0.17.2 are installed first by start_collembot.bat
+# (NVIDIA build if an NVIDIA GPU is found, otherwise the CPU build).
+numpy==1.26.4
+ultralytics==8.4.183
+shapely==2.1.2
+gradio==6.30.0
+Pillow==12.3.0
+opencv-python==4.11.0.86
+scipy
+scikit-learn
+pandas
+matplotlib
+PyYAML
+tqdm
+openpyxl
+requests

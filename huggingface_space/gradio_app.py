@@ -1922,7 +1922,7 @@ def _make_batch_thumbnail(
 # AI-assisted (Claude Opus 5.5, 2026-10-20); reviewed by: <pending>.
 # Nothing in this block changes detection, fusion or counting.
 
-APP_VERSION = "0.2.1"
+APP_VERSION = "0.2.2"
 
 # v0.2.1: title page shown before the app (interface text only).
 USAGE_NOTICE_MD = """
@@ -1942,9 +1942,9 @@ up, which may take a few minutes, and results that were not downloaded may be lo
 - **Test first.** Check threshold and px/mm scale on 2–3 images before you run a whole batch.
 - **Download your results straight away** (ZIP or CSV), so you do not have to run them again
   and they are safe when the app goes to sleep.
-- **Large or routine analyses:** please run CollemBot on your own computer.
-  It is open source, with installation instructions on
-  [GitHub (waldstrom/collembot)](https://github.com/waldstrom/collembot).
+- **Large or routine analyses:** please use the free **desktop version** on your own computer.
+  It is this same app; your images stay on your computer.
+  [Download and instructions](https://github.com/MichaWehrli/collembot_huggingface/tree/main/desktop).
 
 **Questions or problems?** Contact [micha.wehrli@eawag.ch](mailto:micha.wehrli@eawag.ch).
 
@@ -1955,8 +1955,8 @@ If CollemBot is useful for your work, please cite
 USAGE_REMINDER_MD = (
     "💡 *Free to use, but we pay for every GPU hour: please run only what you need and "
     "download results straight away (the app sleeps after 15 min without use). "
-    "Large or routine analyses: run CollemBot locally "
-    "([GitHub](https://github.com/waldstrom/collembot)). "
+    "Large or routine analyses: use the desktop version "
+    "([download](https://github.com/MichaWehrli/collembot_huggingface/tree/main/desktop)). "
     "Help: [micha.wehrli@eawag.ch](mailto:micha.wehrli@eawag.ch)*"
 )
 
@@ -1972,6 +1972,21 @@ def _title_image_kwargs():
     if "buttons" in params:
         return {"buttons": ["fullscreen"]}
     return {k: False for k in ("show_download_button", "show_share_button") if k in params}
+
+
+# v0.2.2: where the app runs (recorded in run_settings.json). Hugging Face sets SPACE_ID
+# inside a Space; the desktop launcher sets COLLEMBOT_RUNTIME=desktop.
+RUNTIME_INFO = {
+    "runtime": ("huggingface-space" if os.environ.get("SPACE_ID")
+                else os.environ.get("COLLEMBOT_RUNTIME", "local")),
+    "device": None,
+}
+
+
+def _title_page_default() -> bool:
+    """Title page is shown unless COLLEMBOT_TITLE_PAGE is 0/false/no/off."""
+    value = os.environ.get("COLLEMBOT_TITLE_PAGE", "1").strip().lower()
+    return value not in ("0", "false", "no", "off")
 
 SCALE_HELP = (
     "Measure once per camera setup in ImageJ/Fiji: draw a straight line between "
@@ -2109,6 +2124,8 @@ def _run_settings(conf_threshold: float, scale: Optional[float],
     return {
         "collembot_app_version": APP_VERSION,
         "model_version": MODEL_VERSION_STR,
+        "runtime": RUNTIME_INFO.get("runtime"),
+        "device": RUNTIME_INFO.get("device"),
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "confidence_threshold": round(float(conf_threshold), 3),
         "fusion_iou_threshold": BEST_IOU,
@@ -2151,6 +2168,8 @@ def launch_app(
     preferred_device: str = DEFAULT_DEVICE,
     predict_batch_size: int = PREDICT_BATCH,
     use_half: Optional[bool] = None,
+    title_page: Optional[bool] = None,
+    inbrowser: bool = False,
 ):
     if share:
         share = False
@@ -2158,6 +2177,9 @@ def launch_app(
         model_path, fuse=fuse,
         preferred_device=preferred_device, use_half=use_half,
     )
+    RUNTIME_INFO["device"] = str(device)
+    if title_page is None:
+        title_page = _title_page_default()
 
     default_img = None
     examples: List[List[str]] = []
@@ -2540,7 +2562,7 @@ def launch_app(
         gr.Markdown(f"# 🪲 CollemBot v{APP_VERSION} — Collembola counting & size analysis")
 
         # v0.2.1: title page; the tabs are shown only after "continue"
-        with gr.Column(visible=True) as notice_col:
+        with gr.Column(visible=title_page) as notice_col:
             with gr.Row(equal_height=False):
                 if TITLE_IMAGE.exists():
                     with gr.Column(scale=2, min_width=280):
@@ -2552,7 +2574,7 @@ def launch_app(
                 "I understand — continue to CollemBot", variant="primary")
         usage_reminder = gr.Markdown(USAGE_REMINDER_MD, visible=False)
 
-        with gr.Column(visible=False) as app_col, gr.Tabs():
+        with gr.Column(visible=not title_page) as app_col, gr.Tabs():
 
             # ── Tab 2: multi-image comparison ─────────────────────────────────
             with gr.Tab("Compare groups"):
@@ -3127,7 +3149,7 @@ def launch_app(
             queue=False,
         )
 
-    demo.launch(share=share, debug=True, allowed_paths=["/tmp"])
+    demo.launch(share=share, debug=True, allowed_paths=["/tmp"], inbrowser=inbrowser)
     return demo
 
 

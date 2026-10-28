@@ -1,5 +1,14 @@
 # CollemBot — changelog
 
+## v0.2.2 (2026-10-28) — desktop version
+Changes AI-assisted (Claude Opus 5.5); maintainer review pending.
+
+- New **desktop version** (`desktop/` folder of the repository): the same `gradio_app.py` runs on the user's own computer (double-click launchers `start_collembot.bat` for Windows and `start_collembot.command` for macOS 13+; Docker alternative), with length measurement, hand correction, calibration and ZIP export. See `desktop/README.md`.
+- `launch_app` has two new options: `title_page` (default: shown; off with `title_page=False` or environment variable `COLLEMBOT_TITLE_PAGE=0`) and `inbrowser`. Without them the Space behaves as in v0.2.1.
+- `run_settings.json` now also records `runtime` (`huggingface-space`, `desktop` or `local`) and `device` (e.g. `cuda:0`, `cpu`).
+- Title page, reminder and README now point to the desktop version for large or routine analyses.
+- Detection, tiling, merging, threshold and CSV contents are unchanged.
+
 ## v0.2.1 (2026-10-28) — interface text only
 Changes AI-assisted (Claude Opus 5.5); maintainer review pending.
 
